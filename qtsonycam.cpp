@@ -97,10 +97,6 @@ void QtSonyCam::timerEvent(QTimerEvent *event)
 
 void QtSonyCam::showFrame(cv::Mat *frame)
 {
-	/*
-	QImage img((quint8 *)d.constData(), 1280, 960, QImage::Format_RGB888);
-	ui.cameraView->setPixmap(QPixmap::fromImage(img.scaled(ui.cameraView->size(), Qt::KeepAspectRatio)));
-	*/
 	QImage img((const quint8 *)frame->data, frame->cols, frame->rows, (int)frame->step, QImage::Format_RGB888);
 	ui.cameraView->setPixmap(QPixmap::fromImage(img.scaled(ui.cameraView->size(), Qt::KeepAspectRatio)));
 }
@@ -273,37 +269,44 @@ bool QtSonyCam::findZCLStdModeAndFPS()
 
 	if (m_cameraModel == "XCD-SX90") {		
 		m_zclStdMode = ZCL_SXGA_MONO;
-		//m_zclStdMode = ZCL_SXGA_MONO16;
 		m_color = false;
+		mode.StdMode_Flag = TRUE;
+		mode.u.Std.Mode = m_zclStdMode;
 	}
 	else {
-		m_zclStdMode = ZCL_SXGA_YUV;
-		//m_zclStdMode = ZCL_SXGA_RGB;
+		m_zclExtMode = ZCL_Mode_2;
 		m_color = true;
+		mode.StdMode_Flag = FALSE;
+		mode.u.Ext.Mode = m_zclExtMode;
+		mode.u.Ext.ColorID = ZCL_RAW;
+		mode.u.Ext.FilterID = ZCL_FGBRG;
 	}
 
-	mode.StdMode_Flag = TRUE;
-	mode.u.Std.Mode = m_zclStdMode;
+	if (m_color) {
+		if (!ZCLCheckCameraMode(m_hCamera, &mode))
+			return false;
+	}
+	else {
+		for (i = (int)ZCL_Fps_30; i >= 0; i--) {
+			mode.u.Std.FrameRate = (ZCL_FPS) i;
 
-	for (i = (int)ZCL_Fps_30; i >= 0; i--) {
-		mode.u.Std.FrameRate = (ZCL_FPS) i;
-
-		if (ZCLCheckCameraMode(m_hCamera, &mode)) {
-			m_zclFps = (ZCL_FPS) i;
-			break;
+			if (ZCLCheckCameraMode(m_hCamera, &mode)) {
+				m_zclFps = (ZCL_FPS) i;
+				break;
+			}
 		}
-	}
 	
-	if (i < 0)
-		return false;	
+		if (i < 0)
+			return false;	
 
-	mode.StdMode_Flag = TRUE;
-	mode.u.Std.Mode = m_zclStdMode;
-	mode.u.Std.FrameRate = m_zclFps;
+		mode.StdMode_Flag = TRUE;
+		mode.u.Std.Mode = m_zclStdMode;
+		mode.u.Std.FrameRate = m_zclFps;
 
-	if (!ZCLSetCameraMode(m_hCamera, &mode)) {
-		QMessageBox::warning(this, "Error", "ZCLSetCameraMode failed");
-		return false;		
+		if (!ZCLSetCameraMode(m_hCamera, &mode)) {
+			QMessageBox::warning(this, "Error", "ZCLSetCameraMode failed");
+			return false;		
+		}
 	}
 
 	return true;
@@ -316,7 +319,7 @@ void QtSonyCam::onCamera()
 		m_hCamera = NULL;
 	}
 
-	CameraDlg dlg(this, m_ZCLFormats, m_ZCLFrameRates);
+	CameraDlg dlg(this, m_ZCLMonoFormats, m_ZCLFrameRates);
 
 	dlg.exec();
 }
@@ -427,8 +430,10 @@ void QtSonyCam::updateStatusBar()
 
 	if (m_cameraUID) {
 		m_cameraModelStatus->setText(m_cameraModel);
-		m_cameraFormatStatus->setText(m_ZCLFormats.at((int)m_zclStdMode));
-		m_cameraFPSStatus->setText(m_ZCLFrameRates.at((int)m_zclFps));
+		if (!m_color) {
+			m_cameraFormatStatus->setText(m_ZCLMonoFormats.at((int)m_zclStdMode));
+			m_cameraFPSStatus->setText(m_ZCLFrameRates.at((int)m_zclFps));
+		}
 	}
 	else {
 		m_cameraModelStatus->setText("");
@@ -495,29 +500,62 @@ void QtSonyCam::restoreWindowState()
 
 void QtSonyCam::initZCLLists()
 {
-	m_ZCLFormats.append("160x120 YUV(4:4:4");
-	m_ZCLFormats.append("320x240 YUV(4:2:2)");
-	m_ZCLFormats.append("640x480 YUV(4:1:1)");
-	m_ZCLFormats.append("640x480 YUV(4:2:2)");
-	m_ZCLFormats.append("640x480 RGB");
-	m_ZCLFormats.append("640x480 MONO");
-	m_ZCLFormats.append("640x480 MONO16");
-	m_ZCLFormats.append("800x600 YUV(4:2:2)");
-	m_ZCLFormats.append("800x600 RGB");
-	m_ZCLFormats.append("800x600 MONO");
-	m_ZCLFormats.append("800x600 MONO16");
-	m_ZCLFormats.append("1024x768 YUV(4:2:2)");
-	m_ZCLFormats.append("1024x768 RGB");
-	m_ZCLFormats.append("1024x768 MONO");
-	m_ZCLFormats.append("1024x768 MONO16");
-	m_ZCLFormats.append("1280x960 YUV(4:2:2)");
-	m_ZCLFormats.append("1280x960 RGB");
-	m_ZCLFormats.append("1280x960 MONO");
-	m_ZCLFormats.append("1280x960 MONO16");
-	m_ZCLFormats.append("1600x1200 YUV(4:2:2)");
-	m_ZCLFormats.append("1600x1200 RGB");
-	m_ZCLFormats.append("1600x1200 MONO");
-	m_ZCLFormats.append("1600x1200 MONO16");
+	m_ZCLMonoFormats.append("160x120 YUV(4:4:4");
+	m_ZCLMonoFormats.append("320x240 YUV(4:2:2)");
+	m_ZCLMonoFormats.append("640x480 YUV(4:1:1)");
+	m_ZCLMonoFormats.append("640x480 YUV(4:2:2)");
+	m_ZCLMonoFormats.append("640x480 RGB");
+	m_ZCLMonoFormats.append("640x480 MONO");
+	m_ZCLMonoFormats.append("640x480 MONO16");
+	m_ZCLMonoFormats.append("800x600 YUV(4:2:2)");
+	m_ZCLMonoFormats.append("800x600 RGB");
+	m_ZCLMonoFormats.append("800x600 MONO");
+	m_ZCLMonoFormats.append("800x600 MONO16");
+	m_ZCLMonoFormats.append("1024x768 YUV(4:2:2)");
+	m_ZCLMonoFormats.append("1024x768 RGB");
+	m_ZCLMonoFormats.append("1024x768 MONO");
+	m_ZCLMonoFormats.append("1024x768 MONO16");
+	m_ZCLMonoFormats.append("1280x960 YUV(4:2:2)");
+	m_ZCLMonoFormats.append("1280x960 RGB");
+	m_ZCLMonoFormats.append("1280x960 MONO");
+	m_ZCLMonoFormats.append("1280x960 MONO16");
+	m_ZCLMonoFormats.append("1600x1200 YUV(4:2:2)");
+	m_ZCLMonoFormats.append("1600x1200 RGB");
+	m_ZCLMonoFormats.append("1600x1200 MONO");
+	m_ZCLMonoFormats.append("1600x1200 MONO16");
+
+	m_ZCLColorFormats.append("Mode 0");
+	m_ZCLColorFormats.append("Mode 1");
+	m_ZCLColorFormats.append("Mode 2");
+	m_ZCLColorFormats.append("Mode 3");
+	m_ZCLColorFormats.append("Mode 4");
+	m_ZCLColorFormats.append("Mode 5");
+	m_ZCLColorFormats.append("Mode 6");
+	m_ZCLColorFormats.append("Mode 7");
+	m_ZCLColorFormats.append("Mode 8");
+	m_ZCLColorFormats.append("Mode 9");
+	m_ZCLColorFormats.append("Mode 10");
+	m_ZCLColorFormats.append("Mode 11");
+	m_ZCLColorFormats.append("Mode 12");
+	m_ZCLColorFormats.append("Mode 13");
+	m_ZCLColorFormats.append("Mode 14");
+	m_ZCLColorFormats.append("Mode 15");
+	m_ZCLColorFormats.append("Mode 16");
+	m_ZCLColorFormats.append("Mode 17");
+	m_ZCLColorFormats.append("Mode 18");
+	m_ZCLColorFormats.append("Mode 19");
+	m_ZCLColorFormats.append("Mode 20");
+	m_ZCLColorFormats.append("Mode 21");
+	m_ZCLColorFormats.append("Mode 22");
+	m_ZCLColorFormats.append("Mode 23");
+	m_ZCLColorFormats.append("Mode 24");
+	m_ZCLColorFormats.append("Mode 25");
+	m_ZCLColorFormats.append("Mode 26");
+	m_ZCLColorFormats.append("Mode 27");
+	m_ZCLColorFormats.append("Mode 28");
+	m_ZCLColorFormats.append("Mode 29");
+	m_ZCLColorFormats.append("Mode 30");
+	m_ZCLColorFormats.append("Mode 31");
 
 	m_ZCLFrameRates.append("1.875 fps");
 	m_ZCLFrameRates.append("3.75 fps");

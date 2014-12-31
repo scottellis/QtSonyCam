@@ -53,7 +53,8 @@ private:
 
 	Ui::QtSonyCamClass ui;
 
-	QStringList m_ZCLFormats;
+	QStringList m_ZCLMonoFormats;
+	QStringList m_ZCLColorFormats;
 	QStringList m_ZCLFrameRates;
 	QStringList m_ZCLColorIDs;
 
@@ -65,6 +66,8 @@ private:
 	quint64 m_cameraUID;
 	ZCL_STDMODE m_zclStdMode;
 	ZCL_FPS m_zclFps;
+	ZCL_EXTMODE m_zclExtMode;
+	ZCL_COLORID m_zclColorID;
 
 	int m_frameTimer;
 	int m_frameCount;

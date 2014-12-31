@@ -97,6 +97,16 @@ void CameraThread::handleMonoFrame(quint8 *data, int rows, int cols)
 	emit newFrame(m);
 }
 
-void CameraThread::handleColorFrame(quint8 *data, int w, int h)
+void CameraThread::handleColorFrame(quint8 *data, int rows, int cols)
 {
+	cv::Mat temp(rows, cols, CV_8UC1, data);
+
+	cv::Mat *m = new cv::Mat(rows, cols, CV_8UC3);
+
+	//cvtColor(temp, *m, CV_BayerBG2RGB, 3);
+	//cvtColor(temp, *m, CV_BayerGB2RGB, 3);
+	//cvtColor(temp, *m, CV_BayerRG2RGB, 3);
+	cvtColor(temp, *m, CV_BayerGR2RGB, 3);
+
+	emit newFrame(m);
 }
