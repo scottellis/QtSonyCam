@@ -79,6 +79,11 @@ private:
 	QHash<QString, quint32> m_features;
 	QHash<QString, quint32> m_featuresMin;
 	QHash<QString, quint32> m_featuresMax;
+	quint32 m_whiteBalance_U;
+	quint32 m_whiteBalance_V;
+	quint32 m_whiteBalanceMin;
+	quint32 m_whiteBalanceMax;
+	bool m_haveWhiteBalance;
 
 	QSettings *m_settings;
 	QLabel *m_cameraModelStatus;

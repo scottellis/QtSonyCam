@@ -329,7 +329,9 @@ bool QtSonyCam::findZCLStdModeAndFPS()
 
 void QtSonyCam::onFeatures()
 {
-	FeatureDlg dlg(this, m_hCamera, m_featureIDs, m_features, m_featuresMin, m_featuresMax);
+	FeatureDlg dlg(this, m_hCamera, m_featureIDs, m_features, m_featuresMin, m_featuresMax,
+                   m_haveWhiteBalance, m_whiteBalance_U, m_whiteBalance_V,
+                   m_whiteBalanceMin, m_whiteBalanceMax);
 
 	if (QDialog::Accepted == dlg.exec()) {
 		QHash<QString, quint32> newFeatures = dlg.newFeatures();
@@ -340,6 +342,9 @@ void QtSonyCam::onFeatures()
 			if (m_features.value(i.key()) != newFeatures.value(i.key()))
 				m_features[i.key()] = newFeatures.value(i.key());					
 		}
+
+		m_whiteBalance_U = dlg.newWhiteBalanceU();
+		m_whiteBalance_V = dlg.newWhiteBalanceV();
 	}
 }
 
@@ -394,6 +399,7 @@ void QtSonyCam::initFeatureLists()
 				max = feature.u.Std.Max_Value;
 
 				value.FeatureID = feature.FeatureID;
+				value.u.WhiteBalance.Abs = 0;
 
 				if (ZCLGetFeatureValue(m_hCamera, &value)) {
 					current = value.u.Std.Value;			
@@ -405,6 +411,29 @@ void QtSonyCam::initFeatureLists()
 			}
 		}
 	}
+
+	m_haveWhiteBalance = false;
+
+	if (m_color) {
+		// white balance is different
+		feature.FeatureID = ZCL_WHITEBALANCE;
+
+		if (ZCLCheckFeature(m_hCamera, &feature)) {
+			if (feature.PresenceFlag) {
+				m_whiteBalanceMin = feature.u.Std.Min_Value;
+				m_whiteBalanceMax = feature.u.Std.Max_Value;
+
+				value.FeatureID = feature.FeatureID;
+
+				if (ZCLGetFeatureValue(m_hCamera, &value)) {
+					m_whiteBalance_U = value.u.WhiteBalance.UB_Value;
+					m_whiteBalance_V = value.u.WhiteBalance.VR_Value;
+					m_haveWhiteBalance = true;					
+				}
+			}
+		}
+	}
+
 }
 
 void QtSonyCam::updateStatusBar()
