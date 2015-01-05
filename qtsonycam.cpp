@@ -344,24 +344,16 @@ void QtSonyCam::onCamera()
 
 void QtSonyCam::onFeatures()
 {
-	FeatureDlg dlg(this, m_features, m_featuresMin, m_featuresMax);
+	FeatureDlg dlg(this, m_hCamera, m_featureIDs, m_features, m_featuresMin, m_featuresMax);
 
 	if (QDialog::Accepted == dlg.exec()) {
 		QHash<QString, int> newFeatures = dlg.newFeatures();
 
 		QHash<QString, int>::const_iterator i;
 
-		for (i = m_features.constBegin(); i != m_features.constEnd(); ++i) {
-			if (newFeatures.contains(i.key())) {
-				if (m_features.value(i.key()) != newFeatures.value(i.key())) {
-					m_features[i.key()] = newFeatures.value(i.key());
-					
-					if (!setFeatureValue(i.key())) {
-						QMessageBox::warning(this, "Error", QString("Failed to set feature %1").arg(i.key()));
-						break;
-					}				
-				}
-			}
+		for (i = newFeatures.constBegin(); i != newFeatures.constEnd(); ++i) {
+			if (m_features.value(i.key()) != newFeatures.value(i.key()))
+				m_features[i.key()] = newFeatures.value(i.key());					
 		}
 	}
 }
@@ -373,16 +365,12 @@ bool QtSonyCam::setFeatureValue(QString feature)
 	if (!m_hCamera)
 		return false;
 
-	if (feature == "Shutter") {
-		value.FeatureID = ZCL_SHUTTER;
-		value.ReqID = ZCL_VALUE;
-		value.u.Std.Value = m_features.value(feature);
-	}
-	else if (feature == "Gain") {
-		value.FeatureID = ZCL_GAIN;
-		value.ReqID = ZCL_VALUE;
-		value.u.Std.Value = m_features.value(feature);
-	}
+	if (!m_featureIDs.contains(feature))
+		return false;
+
+	value.FeatureID = (ZCL_FEATUREID) m_featureIDs.value(feature);
+	value.ReqID = ZCL_VALUE;
+	value.u.Std.Value = m_features.value(feature);
 
 	if (!ZCLSetFeatureValue(m_hCamera, &value))
 		return false;
@@ -399,44 +387,38 @@ void QtSonyCam::initFeatureLists()
 	if (!m_hCamera)
 		return;
 
+	m_featureIDs.clear();
 	m_features.clear();
 	m_featuresMin.clear();
 	m_featuresMax.clear();
 
-	feature.FeatureID = ZCL_SHUTTER;
+	m_featureIDs.insert("Shutter", (int) ZCL_SHUTTER);
+	m_featureIDs.insert("Gain", (int) ZCL_GAIN);
+	m_featureIDs.insert("Brightness", (int) ZCL_BRIGHTNESS);
+	m_featureIDs.insert("Gamma", (int) ZCL_GAMMA);
+	m_featureIDs.insert("Hue", (int) ZCL_HUE);
+	m_featureIDs.insert("Saturation", (int) ZCL_SATURATION);
+	m_featureIDs.insert("Sharpness", (int) ZCL_SHARPNESS);
 
-	if (ZCLCheckFeature(m_hCamera, &feature)) {
-		if (feature.PresenceFlag) {
-			min = feature.u.Std.Min_Value;
-			max = feature.u.Std.Max_Value;
+	QHash<QString, int>::const_iterator i;
 
-			value.FeatureID = feature.FeatureID;
+	for (i = m_featureIDs.constBegin(); i != m_featureIDs.constEnd(); ++i) {
+		feature.FeatureID = (ZCL_FEATUREID) i.value();
 
-			if (ZCLGetFeatureValue(m_hCamera, &value)) {
-				current = value.u.Std.Value;			
+		if (ZCLCheckFeature(m_hCamera, &feature)) {
+			if (feature.PresenceFlag) {
+				min = feature.u.Std.Min_Value;
+				max = feature.u.Std.Max_Value;
 
-				m_features.insert("Shutter", current);
-				m_featuresMin.insert("Shutter", min);
-				m_featuresMax.insert("Shutter", max);
-			}
-		}
-	}
+				value.FeatureID = feature.FeatureID;
 
-	feature.FeatureID = ZCL_GAIN;
+				if (ZCLGetFeatureValue(m_hCamera, &value)) {
+					current = value.u.Std.Value;			
 
-	if (ZCLCheckFeature(m_hCamera, &feature)) {
-		if (feature.PresenceFlag) {
-			min = feature.u.Std.Min_Value;
-			max = feature.u.Std.Max_Value;
-
-			value.FeatureID = feature.FeatureID;
-
-			if (ZCLGetFeatureValue(m_hCamera, &value)) {
-				current = value.u.Std.Value;			
-
-				m_features.insert("Gain", current);
-				m_featuresMin.insert("Gain", min);
-				m_featuresMax.insert("Gain", max);
+					m_features.insert(i.key(), current);
+					m_featuresMin.insert(i.key(), min);
+					m_featuresMax.insert(i.key(), max);
+				}
 			}
 		}
 	}

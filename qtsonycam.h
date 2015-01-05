@@ -74,11 +74,12 @@ private:
 	QQueue<cv::Mat *> m_frameQ;
 	QMutex m_frameQMutex;
 
+	int m_displayTimer;
+
+	QHash<QString, int> m_featureIDs;
 	QHash<QString, int> m_features;
 	QHash<QString, int> m_featuresMin;
 	QHash<QString, int> m_featuresMax;
-
-	int m_displayTimer;
 
 	QSettings *m_settings;
 	QLabel *m_cameraModelStatus;

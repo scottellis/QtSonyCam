@@ -10,18 +10,26 @@
 
 #include "featuredlg.h"
 
-FeatureDlg::FeatureDlg(QWidget *parent, 
+FeatureDlg::FeatureDlg(QWidget *parent,
+                       HCAMERA hCamera,
+                       QHash<QString, int> featureIDs, 
 	                   QHash<QString, int> features,
                        QHash<QString, int> feature_min,
 	                   QHash<QString, int> feature_max)                     
 	: QDialog(parent, Qt::WindowCloseButtonHint | Qt::WindowTitleHint)
 {
+	m_hCamera = hCamera;
+	m_featureIDs = featureIDs;
+	m_features = features;
+	m_pendingFeatures = features;
+
 	layoutWindow(features, feature_min, feature_max);
 
 	setWindowTitle("Features");
 
+	connect(m_apply, SIGNAL(clicked()), SLOT(onApply()));
 	connect(m_ok, SIGNAL(clicked()), SLOT(accept()));
-	connect(m_cancel, SIGNAL(clicked()), SLOT(reject()));
+	connect(m_cancel, SIGNAL(clicked()), SLOT(onCancel()));
 }
 
 QHash<QString, int> FeatureDlg::newFeatures()
@@ -41,6 +49,74 @@ QHash<QString, int> FeatureDlg::newFeatures()
 	}
 
 	return features;
+}
+
+QHash<QString, int> FeatureDlg::pendingFeatures()
+{
+	int val;
+	QHash<QString, int> features;
+	
+	QHash<QString, QLineEdit *>::const_iterator i;
+
+	for (i = m_ctl.constBegin(); i != m_ctl.constEnd(); ++i) {
+		QLineEdit *edit = i.value();
+
+		if (edit->isEnabled()) {
+			val = edit->text().toInt();
+
+			if (val != m_pendingFeatures.value(i.key()))
+				features.insert(i.key(), val);
+		}
+	}
+
+	return features;
+}
+
+void FeatureDlg::onApply()
+{
+	ZCL_SETFEATUREVALUE value;
+
+	QHash<QString, int> change = pendingFeatures();
+
+	QHash<QString, int>::const_iterator i;
+
+	for (i = change.constBegin(); i != change.constEnd(); ++i) {
+		ZCL_FEATUREID id = (ZCL_FEATUREID) m_featureIDs.value(i.key());
+		int val = i.value();
+
+		if (setFeatureValue(id, val))
+			m_pendingFeatures[i.key()] = val;
+	}
+}
+
+void FeatureDlg::onCancel()
+{
+	ZCL_SETFEATUREVALUE value;
+
+	QHash<QString, int>::const_iterator i;
+
+	for (i = m_pendingFeatures.constBegin(); i != m_pendingFeatures.constEnd(); ++i) {
+		ZCL_FEATUREID id = (ZCL_FEATUREID) m_featureIDs.value(i.key());
+		int val = m_features.value(i.key());
+		
+		setFeatureValue(id, val);
+	}
+
+	reject();
+}
+
+bool FeatureDlg::setFeatureValue(ZCL_FEATUREID id, int val)
+{
+	ZCL_SETFEATUREVALUE value;
+
+	value.FeatureID = (ZCL_FEATUREID) id;
+	value.ReqID = ZCL_VALUE;
+	value.u.Std.Value = val;
+
+	if (!ZCLSetFeatureValue(m_hCamera, &value))
+		return false;
+
+	return true;
 }
 
 void FeatureDlg::addControl(QString name,
@@ -85,12 +161,15 @@ void FeatureDlg::layoutWindow(QHash<QString, int> features,
 	for (i = features.constBegin(); i != features.constEnd(); ++i) { 
 		addControl(i.key(), features, feature_min, feature_max);
 
-		minmax = QString(" (%1 to %2)").arg(feature_min.value(i.key())).arg(feature_max.value(i.key()));
+		minmax = QString(" [%1 - %2]").arg(feature_min.value(i.key())).arg(feature_max.value(i.key()));
 		form->addRow(i.key() + minmax, m_ctl.value(i.key()));
 	}
 
     QHBoxLayout *buttons = new QHBoxLayout;
 	buttons->addStretch();
+
+	m_apply = new QPushButton("Apply");
+	buttons->addWidget(m_apply);
 
     m_ok = new QPushButton("OK");
     buttons->addWidget(m_ok);
