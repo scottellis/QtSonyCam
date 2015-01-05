@@ -29,8 +29,7 @@ protected:
 	void run();
 
 private:
-	void handleMonoFrame(quint8 *data, int rows, int cols);
-	void handleColorFrame(quint8 *data, int rows, int cols);
+	void handleFrame(quint8 *data, int rows, int cols);
 
 	bool m_stop;
 	bool m_color;

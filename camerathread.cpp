@@ -69,10 +69,7 @@ void CameraThread::run()
 			break;
 		}
 
-		if (m_color)
-			handleColorFrame(data, info.Image.Height, info.Image.Width);
-		else
-			handleMonoFrame(data, info.Image.Height, info.Image.Width);
+		handleFrame(data, info.Image.Height, info.Image.Width);
 	}
 
 	if (!ZCLIsoStop(m_hCamera))
@@ -86,27 +83,10 @@ done:
 		delete [] data;
 }
 
-void CameraThread::handleMonoFrame(quint8 *data, int rows, int cols)
+void CameraThread::handleFrame(quint8 *data, int rows, int cols)
 {
-	cv::Mat temp(rows, cols, CV_8UC1, data);
+	cv::Mat *m = new cv::Mat(rows, cols, CV_8UC1, data);
 
-	cv::Mat *m = new cv::Mat(rows, cols, CV_8UC3);
-
-	cvtColor(temp, *m, CV_GRAY2RGB, 3); 
-
-	emit newFrame(m);
-}
-
-void CameraThread::handleColorFrame(quint8 *data, int rows, int cols)
-{
-	cv::Mat temp(rows, cols, CV_8UC1, data);
-
-	cv::Mat *m = new cv::Mat(rows, cols, CV_8UC3);
-
-	//cvtColor(temp, *m, CV_BayerBG2RGB, 3);
-	//cvtColor(temp, *m, CV_BayerGB2RGB, 3);
-	//cvtColor(temp, *m, CV_BayerRG2RGB, 3);
-	cvtColor(temp, *m, CV_BayerGR2RGB, 3);
-
-	emit newFrame(m);
+	if (m)
+		emit newFrame(m);
 }

@@ -78,12 +78,15 @@ void FeatureDlg::layoutWindow(QHash<QString, int> features,
 	                          QHash<QString, int> feature_min,
 	                          QHash<QString, int> feature_max)
 {
+	QString minmax;
 	QFormLayout *form = new QFormLayout;
 	QHash<QString, int>::const_iterator i;
 
 	for (i = features.constBegin(); i != features.constEnd(); ++i) { 
 		addControl(i.key(), features, feature_min, feature_max);
-		form->addRow(i.key(), m_ctl.value(i.key()));
+
+		minmax = QString(" (%1 to %2)").arg(feature_min.value(i.key())).arg(feature_max.value(i.key()));
+		form->addRow(i.key() + minmax, m_ctl.value(i.key()));
 	}
 
     QHBoxLayout *buttons = new QHBoxLayout;

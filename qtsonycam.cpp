@@ -5,6 +5,7 @@
 
 #include <qdir.h>
 #include <qmessagebox.h>
+#include <opencv2/imgproc/imgproc.hpp>
 
 #include "qtsonycam.h"
 #include "cameradlg.h"
@@ -83,8 +84,15 @@ void QtSonyCam::timerEvent(QTimerEvent *event)
 
 		m_frameQMutex.lock();
 
-		if (m_frameQ.count() > 0)
+		if (m_frameQ.count() > 0) {
+			// only show the last image
+			while (m_frameQ.count() > 1) {
+				m = m_frameQ.dequeue();
+				delete m;
+			}
+
 			m = m_frameQ.dequeue();
+		}
 
 		m_frameQMutex.unlock();
 
@@ -97,8 +105,35 @@ void QtSonyCam::timerEvent(QTimerEvent *event)
 
 void QtSonyCam::showFrame(cv::Mat *frame)
 {
-	QImage img((const quint8 *)frame->data, frame->cols, frame->rows, (int)frame->step, QImage::Format_RGB888);
+	cv::Mat *m = new cv::Mat(frame->rows, frame->cols, CV_8UC3);
+	
+	if (m_color)
+		cvtColor(*frame, *m, CV_BayerGR2RGB, 3);
+	else
+		cvtColor(*frame, *m, CV_GRAY2RGB, 3); 
+
+	QImage img((const quint8 *)m->data, m->cols, m->rows, (int)m->step, QImage::Format_RGB888);
 	ui.cameraView->setPixmap(QPixmap::fromImage(img.scaled(ui.cameraView->size(), Qt::KeepAspectRatio)));
+
+	delete m;
+}
+
+void QtSonyCam::newFrame(cv::Mat *frame)
+{
+	m_frameCount++;
+
+	if (m_frameQMutex.tryLock()) {
+		// in case we have a bug in the display, limit the queue
+		if (m_frameQ.count() < 8)
+			m_frameQ.enqueue(frame);
+		else
+			delete frame;
+
+		m_frameQMutex.unlock();
+	}
+	else {
+		delete frame;
+	}
 }
 
 void QtSonyCam::onStart()
@@ -133,6 +168,8 @@ void QtSonyCam::onStop()
 
 		delete m_cameraThread;
 		m_cameraThread = NULL;
+
+		m_actualFPSStatus->setText("Actual: 0 fps");
 	}
 
 	m_running = false;
@@ -145,26 +182,6 @@ void QtSonyCam::onStop()
 	qDeleteAll(m_frameQ);
 	m_frameQ.clear();
 	m_frameQMutex.unlock();
-}
-
-void QtSonyCam::newFrame(cv::Mat *frame)
-{
-	cv::Mat *m;
-
-	m_frameCount++;
-
-	if (m_frameQMutex.tryLock()) {
-		while (m_frameQ.size() > 0) {
-			m = m_frameQ.dequeue();
-			delete m;
-		}
-
-		m_frameQ.enqueue(frame);
-		m_frameQMutex.unlock();
-	}
-	else {
-		delete frame;
-	}
 }
 
 void QtSonyCam::onImageInfo()
@@ -183,11 +200,12 @@ void QtSonyCam::onImageInfo()
 	else
 		color = "Unknown";
 
-	s.sprintf("Width: %u\nHeight: %u\nBufferLen: %lu\nDataLen: %lu\nColorID: ",
+	s.sprintf("Width: %u\nHeight: %u\nBufferLen: %lu\nDataLen: %lu\nColorID: %s",
 		info.Image.Width,
 		info.Image.Height,
 		info.Image.Buffer,
-		info.Image.DataLength);
+		info.Image.DataLength,
+		color.toLatin1());
 
 	QMessageBox::information(this, "Image Info", s + color);
 }
@@ -274,7 +292,7 @@ bool QtSonyCam::findZCLStdModeAndFPS()
 		mode.u.Std.Mode = m_zclStdMode;
 	}
 	else {
-		m_zclExtMode = ZCL_Mode_2;
+		m_zclExtMode = ZCL_Mode_3; // 0, 1, 2, 3, 
 		m_color = true;
 		mode.StdMode_Flag = FALSE;
 		mode.u.Ext.Mode = m_zclExtMode;
