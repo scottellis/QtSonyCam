@@ -198,12 +198,11 @@ void QtSonyCam::onImageInfo()
 	else
 		color = "Unknown";
 
-	s.sprintf("Width: %u\nHeight: %u\nBufferLen: %lu\nDataLen: %lu\nColorID: %s",
+	s.sprintf("Width: %u\nHeight: %u\nBufferLen: %lu\nDataLen: %lu\nColorID: ",
 		info.Image.Width,
 		info.Image.Height,
 		info.Image.Buffer,
-		info.Image.DataLength,
-		color.toLatin1());
+		info.Image.DataLength);
 
 	QMessageBox::information(this, "Image Info", s + color);
 }

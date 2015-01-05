@@ -168,6 +168,8 @@ void FeatureDlg::layoutWindow(QHash<QString, quint32> features,
 	m_apply = new QPushButton("Apply");
 	buttons->addWidget(m_apply);
 
+	buttons->addStretch();
+
     m_ok = new QPushButton("OK");
     buttons->addWidget(m_ok);
 
