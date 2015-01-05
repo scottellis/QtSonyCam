@@ -59,15 +59,6 @@
     <ClCompile Include="GeneratedFiles\Release\moc_camerathread.cpp">
       <Filter>Generated Files\Release</Filter>
     </ClCompile>
-    <ClCompile Include="GeneratedFiles\Debug\moc_cameradlg.cpp">
-      <Filter>Generated Files\Debug</Filter>
-    </ClCompile>
-    <ClCompile Include="GeneratedFiles\Release\moc_cameradlg.cpp">
-      <Filter>Generated Files\Release</Filter>
-    </ClCompile>
-    <ClCompile Include="cameradlg.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="GeneratedFiles\Debug\moc_featuredlg.cpp">
       <Filter>Generated Files\Debug</Filter>
     </ClCompile>
@@ -89,9 +80,6 @@
       <Filter>Resource Files</Filter>
     </CustomBuild>
     <CustomBuild Include="camerathread.h">
-      <Filter>Header Files</Filter>
-    </CustomBuild>
-    <CustomBuild Include="cameradlg.h">
       <Filter>Header Files</Filter>
     </CustomBuild>
     <CustomBuild Include="featuredlg.h">

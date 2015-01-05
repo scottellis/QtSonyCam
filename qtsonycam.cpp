@@ -8,7 +8,6 @@
 #include <opencv2/imgproc/imgproc.hpp>
 
 #include "qtsonycam.h"
-#include "cameradlg.h"
 #include "featuredlg.h"
 
 QtSonyCam::QtSonyCam(QWidget *parent)
@@ -27,7 +26,6 @@ QtSonyCam::QtSonyCam(QWidget *parent)
 
 	connect(ui.actionExit, SIGNAL(triggered()), SLOT(close()));
 	connect(ui.actionImage_Info, SIGNAL(triggered()), SLOT(onImageInfo()));
-	connect(ui.actionCamera, SIGNAL(triggered()), SLOT(onCamera()));
 	connect(ui.actionFeatures, SIGNAL(triggered()), SLOT(onFeatures()));
 	connect(ui.actionStart, SIGNAL(triggered()), SLOT(onStart()));
 	connect(ui.actionStop, SIGNAL(triggered()), SLOT(onStop()));
@@ -144,7 +142,7 @@ void QtSonyCam::onStart()
 		connect(m_cameraThread, SIGNAL(newFrame(cv::Mat *)), this, SLOT(newFrame(cv::Mat *)), Qt::DirectConnection);
 		m_frameCount = 0;
 		m_frameTimer = startTimer(3000);
-		m_displayTimer = startTimer(10);
+		m_displayTimer = startTimer(25);
 		m_cameraThread->start();
 		m_running = true;
 		ui.actionStart->setEnabled(false);
@@ -330,26 +328,14 @@ bool QtSonyCam::findZCLStdModeAndFPS()
 	return true;
 }
 
-void QtSonyCam::onCamera()
-{
-	if (m_hCamera) {
-		ZCLClose(m_hCamera);
-		m_hCamera = NULL;
-	}
-
-	CameraDlg dlg(this, m_ZCLMonoFormats, m_ZCLFrameRates);
-
-	dlg.exec();
-}
-
 void QtSonyCam::onFeatures()
 {
 	FeatureDlg dlg(this, m_hCamera, m_featureIDs, m_features, m_featuresMin, m_featuresMax);
 
 	if (QDialog::Accepted == dlg.exec()) {
-		QHash<QString, int> newFeatures = dlg.newFeatures();
+		QHash<QString, quint32> newFeatures = dlg.newFeatures();
 
-		QHash<QString, int>::const_iterator i;
+		QHash<QString, quint32>::const_iterator i;
 
 		for (i = newFeatures.constBegin(); i != newFeatures.constEnd(); ++i) {
 			if (m_features.value(i.key()) != newFeatures.value(i.key()))
@@ -358,19 +344,16 @@ void QtSonyCam::onFeatures()
 	}
 }
 
-bool QtSonyCam::setFeatureValue(QString feature)
+bool QtSonyCam::setFeatureValue(ZCL_FEATUREID id, quint32 val)
 {
 	ZCL_SETFEATUREVALUE value;
 
 	if (!m_hCamera)
 		return false;
 
-	if (!m_featureIDs.contains(feature))
-		return false;
-
-	value.FeatureID = (ZCL_FEATUREID) m_featureIDs.value(feature);
+	value.FeatureID = id;
 	value.ReqID = ZCL_VALUE;
-	value.u.Std.Value = m_features.value(feature);
+	value.u.Std.Value = val;
 
 	if (!ZCLSetFeatureValue(m_hCamera, &value))
 		return false;
@@ -382,7 +365,7 @@ void QtSonyCam::initFeatureLists()
 {
 	ZCL_CHECKFEATURE feature;
 	ZCL_GETFEATUREVALUE value;
-	int min, max, current;
+	quint32 min, max, current;
 
 	if (!m_hCamera)
 		return;
@@ -399,6 +382,7 @@ void QtSonyCam::initFeatureLists()
 	m_featureIDs.insert("Hue", (int) ZCL_HUE);
 	m_featureIDs.insert("Saturation", (int) ZCL_SATURATION);
 	m_featureIDs.insert("Sharpness", (int) ZCL_SHARPNESS);
+	m_featureIDs.insert("AutoExposure", (int) ZCL_AE);
 
 	QHash<QString, int>::const_iterator i;
 

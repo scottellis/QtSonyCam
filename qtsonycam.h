@@ -28,7 +28,6 @@ public:
 public slots:
 	void onFeatures();
 	void onImageInfo();
-	void onCamera();
 	void onStart();
 	void onStop();
 
@@ -42,7 +41,7 @@ private:
 	bool findCamera();
 	bool findZCLStdModeAndFPS();
 	void showFrame(cv::Mat *frame);
-	bool setFeatureValue(QString feature);
+	bool setFeatureValue(ZCL_FEATUREID id, quint32 val);
 
 	void initFeatureLists();
 	void initZCLLists();
@@ -77,9 +76,9 @@ private:
 	int m_displayTimer;
 
 	QHash<QString, int> m_featureIDs;
-	QHash<QString, int> m_features;
-	QHash<QString, int> m_featuresMin;
-	QHash<QString, int> m_featuresMax;
+	QHash<QString, quint32> m_features;
+	QHash<QString, quint32> m_featuresMin;
+	QHash<QString, quint32> m_featuresMax;
 
 	QSettings *m_settings;
 	QLabel *m_cameraModelStatus;

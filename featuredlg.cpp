@@ -13,9 +13,9 @@
 FeatureDlg::FeatureDlg(QWidget *parent,
                        HCAMERA hCamera,
                        QHash<QString, int> featureIDs, 
-	                   QHash<QString, int> features,
-                       QHash<QString, int> feature_min,
-	                   QHash<QString, int> feature_max)                     
+	                   QHash<QString, quint32> features,
+                       QHash<QString, quint32> feature_min,
+	                   QHash<QString, quint32> feature_max)                     
 	: QDialog(parent, Qt::WindowCloseButtonHint | Qt::WindowTitleHint)
 {
 	m_hCamera = hCamera;
@@ -32,10 +32,10 @@ FeatureDlg::FeatureDlg(QWidget *parent,
 	connect(m_cancel, SIGNAL(clicked()), SLOT(onCancel()));
 }
 
-QHash<QString, int> FeatureDlg::newFeatures()
+QHash<QString, quint32> FeatureDlg::newFeatures()
 {
 	int val;
-	QHash<QString, int> features;
+	QHash<QString, quint32> features;
 	
 	QHash<QString, QLineEdit *>::const_iterator i;
 
@@ -51,10 +51,10 @@ QHash<QString, int> FeatureDlg::newFeatures()
 	return features;
 }
 
-QHash<QString, int> FeatureDlg::pendingFeatures()
+QHash<QString, quint32> FeatureDlg::pendingFeatures()
 {
 	int val;
-	QHash<QString, int> features;
+	QHash<QString, quint32> features;
 	
 	QHash<QString, QLineEdit *>::const_iterator i;
 
@@ -76,9 +76,9 @@ void FeatureDlg::onApply()
 {
 	ZCL_SETFEATUREVALUE value;
 
-	QHash<QString, int> change = pendingFeatures();
+	QHash<QString, quint32> change = pendingFeatures();
 
-	QHash<QString, int>::const_iterator i;
+	QHash<QString, quint32>::const_iterator i;
 
 	for (i = change.constBegin(); i != change.constEnd(); ++i) {
 		ZCL_FEATUREID id = (ZCL_FEATUREID) m_featureIDs.value(i.key());
@@ -93,7 +93,7 @@ void FeatureDlg::onCancel()
 {
 	ZCL_SETFEATUREVALUE value;
 
-	QHash<QString, int>::const_iterator i;
+	QHash<QString, quint32>::const_iterator i;
 
 	for (i = m_pendingFeatures.constBegin(); i != m_pendingFeatures.constEnd(); ++i) {
 		ZCL_FEATUREID id = (ZCL_FEATUREID) m_featureIDs.value(i.key());
@@ -105,7 +105,7 @@ void FeatureDlg::onCancel()
 	reject();
 }
 
-bool FeatureDlg::setFeatureValue(ZCL_FEATUREID id, int val)
+bool FeatureDlg::setFeatureValue(ZCL_FEATUREID id, quint32 val)
 {
 	ZCL_SETFEATUREVALUE value;
 
@@ -120,26 +120,23 @@ bool FeatureDlg::setFeatureValue(ZCL_FEATUREID id, int val)
 }
 
 void FeatureDlg::addControl(QString name,
-	                        QHash<QString, int> features,
-	                        QHash<QString, int> feature_min,
-	                        QHash<QString, int> feature_max)
+	                        QHash<QString, quint32> features,
+	                        QHash<QString, quint32> feature_min,
+	                        QHash<QString, quint32> feature_max)
 {
 	QLineEdit *ctl = new QLineEdit;
 	
 	if (features.contains(name)) {
-		int current = features.value(name);
-		int min = feature_min.value(name, -1);
-		int max = feature_max.value(name, -1);
+		quint32 current = features.value(name);
+		quint32 min = feature_min.value(name);
+		quint32 max = feature_max.value(name);
 
-		if (min != -1 && max != -1 && min < max) {
-			if (current < min)
-				current = min;
-			else if (current > max)
-				current = max;
+		if (current < min)
+			current = min;
+		else if (current > max)
+			current = max;
 
-			ctl->setValidator(new QIntValidator(min, max));
-		}
-
+		ctl->setValidator(new QIntValidator(min, max));
 		ctl->setText(QString::number(current));
 		ctl->setMaximumWidth(80);
 	}
@@ -150,13 +147,13 @@ void FeatureDlg::addControl(QString name,
 	m_ctl.insert(name, ctl);
 }
 
-void FeatureDlg::layoutWindow(QHash<QString, int> features,
-	                          QHash<QString, int> feature_min,
-	                          QHash<QString, int> feature_max)
+void FeatureDlg::layoutWindow(QHash<QString, quint32> features,
+	                          QHash<QString, quint32> feature_min,
+	                          QHash<QString, quint32> feature_max)
 {
 	QString minmax;
 	QFormLayout *form = new QFormLayout;
-	QHash<QString, int>::const_iterator i;
+	QHash<QString, quint32>::const_iterator i;
 
 	for (i = features.constBegin(); i != features.constEnd(); ++i) { 
 		addControl(i.key(), features, feature_min, feature_max);

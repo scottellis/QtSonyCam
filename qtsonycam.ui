@@ -48,7 +48,6 @@
     </property>
     <addaction name="actionFeatures"/>
     <addaction name="actionImage_Info"/>
-    <addaction name="actionCamera"/>
    </widget>
    <addaction name="menuAction"/>
    <addaction name="menuTools"/>
@@ -67,7 +66,6 @@
    <addaction name="separator"/>
    <addaction name="actionFeatures"/>
    <addaction name="actionImage_Info"/>
-   <addaction name="actionCamera"/>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
   <action name="actionStart">
@@ -93,11 +91,6 @@
   <action name="actionImage_Info">
    <property name="text">
     <string>Image Info</string>
-   </property>
-  </action>
-  <action name="actionCamera">
-   <property name="text">
-    <string>Camera</string>
    </property>
   </action>
  </widget>
