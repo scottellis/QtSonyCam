@@ -5,6 +5,8 @@
 
 #include <qdir.h>
 #include <qmessagebox.h>
+#include <qboxlayout.h>
+
 #include <opencv2/imgproc/imgproc.hpp>
 
 #include "qtsonycam.h"
@@ -19,6 +21,7 @@ QtSonyCam::QtSonyCam(QWidget *parent)
 	m_cameraThread = NULL;
 	m_cameraUID = 0;
 	m_color = false;
+	m_externalTrigger = false;
 
 	ZCLSetStructVersion(ZCL_LIBRARY_STRUCT_VERSION);
 
@@ -27,12 +30,16 @@ QtSonyCam::QtSonyCam(QWidget *parent)
 	connect(ui.actionExit, SIGNAL(triggered()), SLOT(close()));
 	connect(ui.actionImage_Info, SIGNAL(triggered()), SLOT(onImageInfo()));
 	connect(ui.actionFeatures, SIGNAL(triggered()), SLOT(onFeatures()));
+	connect(ui.actionExternal_Trigger, SIGNAL(triggered()), SLOT(onExternalTrigger()));
 	connect(ui.actionStart, SIGNAL(triggered()), SLOT(onStart()));
 	connect(ui.actionStop, SIGNAL(triggered()), SLOT(onStop()));
 	
 	initZCLLists();
+	layoutWindow();
 	layoutStatusBar();
 	restoreWindowState();
+
+	ui.actionExternal_Trigger->setChecked(m_externalTrigger);
 
 	ui.actionStop->setEnabled(false);
 
@@ -69,9 +76,9 @@ void QtSonyCam::closeEvent(QCloseEvent *)
 	saveWindowState();
 }
 
-void QtSonyCam::timerEvent(QTimerEvent *event)
+void QtSonyCam::timerEvent(QTimerEvent *e)
 {
-	if (event->timerId() == m_frameTimer) {
+	if (e->timerId() == m_frameTimer) {
 		double fps = m_frameCount;
 		fps /= 3.0;
 		m_actualFPSStatus->setText(QString("Actual: %1 fps").arg(QString::number(fps, 'g', 5)));
@@ -111,7 +118,7 @@ void QtSonyCam::showFrame(cv::Mat *frame)
 		cvtColor(*frame, *m, CV_GRAY2RGB, 3); 
 
 	QImage img((const quint8 *)m->data, m->cols, m->rows, (int)m->step, QImage::Format_RGB888);
-	ui.cameraView->setPixmap(QPixmap::fromImage(img.scaled(ui.cameraView->size(), Qt::KeepAspectRatio)));
+	m_cameraView->setPixmap(QPixmap::fromImage(img.scaled(m_cameraView->size(), Qt::KeepAspectRatio)));
 
 	delete m;
 }
@@ -136,7 +143,15 @@ void QtSonyCam::newFrame(cv::Mat *frame)
 
 void QtSonyCam::onStart()
 {
-	m_cameraThread = new CameraThread(this, m_hCamera, m_color);
+	if (!setupTriggerSource()) {
+		ZCLClose(m_hCamera);
+		m_hCamera = NULL;
+		m_cameraUID = 0;
+		QMessageBox::warning(this, "Error", "Trigger mode source setup failed");
+		return;
+	}
+
+	m_cameraThread = new CameraThread(this, m_hCamera, m_color, m_externalTrigger);
 
 	if (m_cameraThread) {
 		connect(m_cameraThread, SIGNAL(newFrame(cv::Mat *)), this, SLOT(newFrame(cv::Mat *)), Qt::DirectConnection);
@@ -188,6 +203,9 @@ void QtSonyCam::onImageInfo()
 	QString color;
 	ZCL_GETIMAGEINFO info;
 
+	if (!m_hCamera)
+		return;
+
 	if (!ZCLGetImageInfo(m_hCamera, &info)) {
 		QMessageBox::warning(this, "Error", "ZCLGetImageInfo failed");
 		return;
@@ -205,6 +223,11 @@ void QtSonyCam::onImageInfo()
 		info.Image.DataLength);
 
 	QMessageBox::information(this, "Image Info", s + color);
+}
+
+void QtSonyCam::onExternalTrigger()
+{
+	m_externalTrigger = ui.actionExternal_Trigger->isChecked();
 }
 
 bool QtSonyCam::findCamera()
@@ -254,15 +277,16 @@ bool QtSonyCam::findCamera()
 	m_cameraModel = (char *)cameraList->Info[index].ModelName;
 
 	if (!ZCLOpen(m_cameraUID, &m_hCamera)) {
+		m_hCamera = NULL;
 		QMessageBox::warning(this, "Error", "ZCLOpen failed");
 		return false;
 	}
 
-	if (!findZCLStdModeAndFPS()) {
+	if (!setupCameraMode()) {
 		ZCLClose(m_hCamera);
 		m_hCamera = NULL;
 		m_cameraUID = 0;
-		QMessageBox::warning(this, "Error", "Failed finding mode and fps");
+		QMessageBox::warning(this, "Error", "Camera mode setup failed");
 		return false;
 	}
 
@@ -271,7 +295,7 @@ bool QtSonyCam::findCamera()
 	return true;
 }
 
-bool QtSonyCam::findZCLStdModeAndFPS()
+bool QtSonyCam::setupCameraMode()
 {
 	int i;
 	ZCL_CAMERAMODE mode;
@@ -282,47 +306,48 @@ bool QtSonyCam::findZCLStdModeAndFPS()
 	if (!m_hCamera)
 		return false;
 
-	if (m_cameraModel == "XCD-SX90") {		
-		m_zclStdMode = ZCL_SXGA_MONO;
+	if (m_cameraModel == "XCD-SX90")
 		m_color = false;
-		mode.StdMode_Flag = TRUE;
-		mode.u.Std.Mode = m_zclStdMode;
-	}
-	else {
-		m_zclExtMode = ZCL_Mode_3; // 0, 1, 2, 3, 
+	else
 		m_color = true;
-		mode.StdMode_Flag = FALSE;
-		mode.u.Ext.Mode = m_zclExtMode;
-		mode.u.Ext.ColorID = ZCL_RAW;
-		mode.u.Ext.FilterID = ZCL_FGBRG;
-	}
 
-	if (m_color) {
-		if (!ZCLCheckCameraMode(m_hCamera, &mode))
-			return false;
+	m_zclStdMode = ZCL_SXGA_MONO;
+
+	// frame rate setting is ignored when we externally trigger
+	m_zclFps = ZCL_Fps_15;
+
+	mode.StdMode_Flag = TRUE;
+	mode.u.Std.Mode = m_zclStdMode;
+	mode.u.Std.FrameRate = m_zclFps;
+
+	if (!ZCLSetCameraMode(m_hCamera, &mode))
+		return false;		
+
+	return true;
+}
+
+bool QtSonyCam::setupTriggerSource()
+{
+	ZCL_SETFEATUREVALUE value;
+
+	if (!m_hCamera)
+		return false;
+
+	value.FeatureID = ZCL_TRIGGER;
+
+	if (m_externalTrigger) {
+		value.ReqID = ZCL_VALUE;
+		value.u.Trigger.Polarity = 1;
+		value.u.Trigger.Source = ZCL_Trigger_Source0;
+		value.u.Trigger.Mode = ZCL_Trigger_Mode0;
+		value.u.Trigger.Parameter = 0;
 	}
 	else {
-		for (i = (int)ZCL_Fps_30; i >= 0; i--) {
-			mode.u.Std.FrameRate = (ZCL_FPS) i;
-
-			if (ZCLCheckCameraMode(m_hCamera, &mode)) {
-				m_zclFps = (ZCL_FPS) i;
-				break;
-			}
-		}
-	
-		if (i < 0)
-			return false;	
-
-		mode.StdMode_Flag = TRUE;
-		mode.u.Std.Mode = m_zclStdMode;
-		mode.u.Std.FrameRate = m_zclFps;
-
-		if (!ZCLSetCameraMode(m_hCamera, &mode)) {
-			QMessageBox::warning(this, "Error", "ZCLSetCameraMode failed");
-			return false;		
-		}
+		value.ReqID = ZCL_FEATURE_OFF;
 	}
+
+	if (!ZCLSetFeatureValue(m_hCamera, &value))
+		return false;
 
 	return true;
 }
@@ -399,7 +424,6 @@ void QtSonyCam::initFeatureLists()
 				max = feature.u.Std.Max_Value;
 
 				value.FeatureID = feature.FeatureID;
-				value.u.WhiteBalance.Abs = 0;
 
 				if (ZCLGetFeatureValue(m_hCamera, &value)) {
 					current = value.u.Std.Value;			
@@ -424,6 +448,7 @@ void QtSonyCam::initFeatureLists()
 				m_whiteBalanceMax = feature.u.Std.Max_Value;
 
 				value.FeatureID = feature.FeatureID;
+				value.u.WhiteBalance.Abs = 0;
 
 				if (ZCLGetFeatureValue(m_hCamera, &value)) {
 					m_whiteBalance_U = value.u.WhiteBalance.UB_Value;
@@ -442,10 +467,8 @@ void QtSonyCam::updateStatusBar()
 
 	if (m_cameraUID) {
 		m_cameraModelStatus->setText(m_cameraModel);
-		if (!m_color) {
-			m_cameraFormatStatus->setText(m_ZCLMonoFormats.at((int)m_zclStdMode));
-			m_cameraFPSStatus->setText(m_ZCLFrameRates.at((int)m_zclFps));
-		}
+		m_cameraFormatStatus->setText(m_ZCLMonoFormats.at((int)m_zclStdMode));
+		m_cameraFPSStatus->setText(m_ZCLFrameRates.at((int)m_zclFps));
 	}
 	else {
 		m_cameraModelStatus->setText("");
@@ -458,6 +481,29 @@ void QtSonyCam::updateStatusBar()
 			(DWORD)(m_cameraUID & 0x00000000ffffffff));
 
 	m_cameraUIDStatus->setText(s);
+}
+
+void QtSonyCam::layoutWindow()
+{
+	QWidget *centralWidget = new QWidget(this);
+	QVBoxLayout *verticalLayout = new QVBoxLayout(centralWidget);
+	verticalLayout->setSpacing(6);
+	verticalLayout->setContentsMargins(0, 0, 0, 0);
+
+	m_cameraView = new QLabel(centralWidget);
+	
+	QSizePolicy sizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+	sizePolicy.setHorizontalStretch(0);
+	sizePolicy.setVerticalStretch(0);
+	sizePolicy.setHeightForWidth(m_cameraView->sizePolicy().hasHeightForWidth());
+
+	m_cameraView->setSizePolicy(sizePolicy);
+	m_cameraView->setMinimumSize(QSize(320, 240));
+	m_cameraView->setAlignment(Qt::AlignCenter);
+
+	verticalLayout->addWidget(m_cameraView);
+
+	setCentralWidget(centralWidget);
 }
 
 void QtSonyCam::layoutStatusBar()
@@ -497,6 +543,10 @@ void QtSonyCam::saveWindowState()
 	m_settings->setValue("Geometry", saveGeometry());
 	m_settings->setValue("State", saveState());
 	m_settings->endGroup();
+
+	m_settings->beginGroup("Camera");
+	m_settings->setValue("ExternalTrigger", m_externalTrigger);
+	m_settings->endGroup();
 }
 
 void QtSonyCam::restoreWindowState()
@@ -508,6 +558,10 @@ void QtSonyCam::restoreWindowState()
     restoreGeometry(m_settings->value("Geometry").toByteArray());
     restoreState(m_settings->value("State").toByteArray());
     m_settings->endGroup();
+
+	m_settings->beginGroup("Camera");
+	m_externalTrigger = m_settings->value("ExternalTrigger", false).toBool();
+	m_settings->endGroup();
 }
 
 void QtSonyCam::initZCLLists()

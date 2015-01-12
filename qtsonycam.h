@@ -11,8 +11,9 @@
 #include <qqueue.h>
 #include <qmutex.h>
 #include <qhash.h>
+#include <qlabel.h>
 
-#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/core/core.hpp>
 
 #include "ui_qtsonycam.h"
 #include "camerathread.h"
@@ -28,6 +29,7 @@ public:
 public slots:
 	void onFeatures();
 	void onImageInfo();
+	void onExternalTrigger();
 	void onStart();
 	void onStop();
 
@@ -39,7 +41,8 @@ protected:
 
 private:
 	bool findCamera();
-	bool findZCLStdModeAndFPS();
+	bool setupCameraMode();
+	bool setupTriggerSource();
 	void showFrame(cv::Mat *frame);
 	bool setFeatureValue(ZCL_FEATUREID id, quint32 val);
 
@@ -47,11 +50,13 @@ private:
 	void initZCLLists();
 	void updateStatusBar();
 	void layoutStatusBar();
+	void layoutWindow();
 	void saveWindowState();
 	void restoreWindowState();
 
 	Ui::QtSonyCamClass ui;
 
+	QLabel *m_cameraView;
 	QStringList m_ZCLMonoFormats;
 	QStringList m_ZCLColorFormats;
 	QStringList m_ZCLFrameRates;
@@ -59,6 +64,7 @@ private:
 
 	bool m_running;
 	bool m_color;
+	bool m_externalTrigger;
 	CameraThread *m_cameraThread;
 	HCAMERA m_hCamera;
 	QString m_cameraModel;

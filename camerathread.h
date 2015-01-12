@@ -10,15 +10,14 @@
 
 #include <Windows.h>
 #include <ZCLAPI.h>
-
-#include <opencv2/highgui/highgui.hpp>
+#include <opencv2/core/core.hpp>
 
 class CameraThread : public QThread 
 {
 	Q_OBJECT
 
 public:
-	CameraThread(QObject *parent, HCAMERA hCamera, bool color);
+	CameraThread(QObject *parent, HCAMERA hCamera, bool color, bool externalTrigger);
 
 	bool stop(unsigned long max_wait);
 
@@ -33,6 +32,7 @@ private:
 
 	bool m_stop;
 	bool m_color;
+	bool m_externalTrigger;
 	HCAMERA m_hCamera;
 };
 

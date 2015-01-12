@@ -5,14 +5,14 @@
 
 #include <qdebug.h>
 
-#include <opencv2/imgproc/imgproc.hpp>
 #include "camerathread.h"
 
-CameraThread::CameraThread(QObject *parent, HCAMERA hCamera, bool color) 
+CameraThread::CameraThread(QObject *parent, HCAMERA hCamera, bool color, bool externalTrigger) 
 	: QThread(parent)
 {
 	m_hCamera = hCamera;
 	m_color = color;
+	m_externalTrigger = externalTrigger;
 	m_stop = false;
 }
 
@@ -26,6 +26,7 @@ bool CameraThread::stop(unsigned long max_wait)
 void CameraThread::run()
 {
 	ZCL_GETIMAGEINFO info;
+
 	quint8 *data = NULL;
 
 	if (!m_hCamera) {
@@ -64,18 +65,25 @@ void CameraThread::run()
 		}
 
 		if (!ZCLImageCompleteWaitTimeOut(m_hCamera, data, NULL, NULL, NULL, 1000)) {
-			qDebug() << "CameraThread::run(): ZCLImageCompleteWait() timed out";
-			m_stop = true;
-			break;
-		}
+			if (!ZCLAbortImageReqAll(m_hCamera))
+				qDebug() << "CameraThread::run(): ZCLAbortImageReqAll() failed";
 
-		handleFrame(data, info.Image.Height, info.Image.Width);
+			if (!m_externalTrigger) {
+				qDebug() << "CameraThread::run(): ZCLImageCompleteWait() timed out";
+				m_stop = true;
+				break;
+			}
+		}
+		else {
+			handleFrame(data, info.Image.Height, info.Image.Width);
+		}
 	}
 
 	if (!ZCLIsoStop(m_hCamera))
 		qDebug() << "CameraThread::run(): ZCLIsoStop() failed";
 	
 done:
+
 	if (!ZCLIsoRelease(m_hCamera))
 		qDebug() << "CameraThread::run(): ZCLIsoRelease() failed";
 

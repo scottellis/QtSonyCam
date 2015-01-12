@@ -13,17 +13,7 @@
   <property name="windowTitle">
    <string>QtSonyCam</string>
   </property>
-  <widget class="QWidget" name="centralWidget">
-   <layout class="QHBoxLayout" name="horizontalLayout">
-    <item>
-     <widget class="QLabel" name="cameraView">
-      <property name="text">
-       <string/>
-      </property>
-     </widget>
-    </item>
-   </layout>
-  </widget>
+  <widget class="QWidget" name="centralWidget"/>
   <widget class="QMenuBar" name="menuBar">
    <property name="geometry">
     <rect>
@@ -48,6 +38,7 @@
     </property>
     <addaction name="actionFeatures"/>
     <addaction name="actionImage_Info"/>
+    <addaction name="actionExternal_Trigger"/>
    </widget>
    <addaction name="menuAction"/>
    <addaction name="menuTools"/>
@@ -85,12 +76,20 @@
   </action>
   <action name="actionFeatures">
    <property name="text">
-    <string>Features</string>
+    <string>Features ...</string>
    </property>
   </action>
   <action name="actionImage_Info">
    <property name="text">
-    <string>Image Info</string>
+    <string>Image Info ...</string>
+   </property>
+  </action>
+  <action name="actionExternal_Trigger">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>External Trigger</string>
    </property>
   </action>
  </widget>
