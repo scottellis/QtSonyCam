@@ -81,7 +81,7 @@ void QtSonyCam::timerEvent(QTimerEvent *e)
 	if (e->timerId() == m_frameTimer) {
 		double fps = m_frameCount;
 		fps /= 3.0;
-		m_actualFPSStatus->setText(QString("Actual: %1 fps").arg(QString::number(fps, 'g', 5)));
+		m_fpsStatus->setText(QString("%1 fps").arg(QString::number(fps, 'g', 5)));
 		m_frameCount = 0;
 	}
 	else {
@@ -161,7 +161,8 @@ void QtSonyCam::onStart()
 		m_cameraThread->start();
 		m_running = true;
 		ui.actionStart->setEnabled(false);
-		ui.actionStop->setEnabled(true);	
+		ui.actionStop->setEnabled(true);
+		ui.actionExternal_Trigger->setEnabled(false);
 	}
 }
 
@@ -182,14 +183,16 @@ void QtSonyCam::onStop()
 		delete m_cameraThread;
 		m_cameraThread = NULL;
 
-		m_actualFPSStatus->setText("Actual: 0 fps");
+		m_fpsStatus->setText("0 fps");
 	}
 
 	m_running = false;
 	ui.actionStop->setEnabled(false);	
 
-	if (m_hCamera)
+	if (m_hCamera) {
 		ui.actionStart->setEnabled(true);
+		ui.actionExternal_Trigger->setEnabled(true);
+	}
 
 	m_frameQMutex.lock();
 	qDeleteAll(m_frameQ);
@@ -216,7 +219,9 @@ void QtSonyCam::onImageInfo()
 	else
 		color = "Unknown";
 
-	s.sprintf("Width: %u\nHeight: %u\nBufferLen: %lu\nDataLen: %lu\nColorID: ",
+	s.sprintf("PosX: %u\nPosY: %u\nWidth: %u\nHeight: %u\nBufferLen: %lu\nDataLen: %lu\nColorID: ",
+		info.Image.PosX,
+		info.Image.PosY,
 		info.Image.Width,
 		info.Image.Height,
 		info.Image.Buffer,
@@ -228,6 +233,7 @@ void QtSonyCam::onImageInfo()
 void QtSonyCam::onExternalTrigger()
 {
 	m_externalTrigger = ui.actionExternal_Trigger->isChecked();
+	setupCameraMode();
 }
 
 bool QtSonyCam::findCamera()
@@ -300,10 +306,10 @@ bool QtSonyCam::setupCameraMode()
 	int i;
 	ZCL_CAMERAMODE mode;
 
-	m_cameraFormatStatus->setText("");
-	m_cameraFPSStatus->setText("");
-
 	if (!m_hCamera)
+		return false;
+
+	if (!ZCLNowCameraMode(m_hCamera, &mode))
 		return false;
 
 	if (m_cameraModel == "XCD-SX90")
@@ -311,18 +317,35 @@ bool QtSonyCam::setupCameraMode()
 	else
 		m_color = true;
 
-	m_zclStdMode = ZCL_SXGA_MONO;
-
-	// frame rate setting is ignored when we externally trigger
-	m_zclFps = ZCL_Fps_15;
-
-	mode.StdMode_Flag = TRUE;
-	mode.u.Std.Mode = m_zclStdMode;
-	mode.u.Std.FrameRate = m_zclFps;
+	if (m_externalTrigger) {
+		mode.StdMode_Flag = FALSE;
+		mode.u.Ext.Mode = ZCL_Mode_3;
+		mode.u.Ext.ColorID = ZCL_MONO;
+		mode.u.Ext.FilterID = ZCL_FRGGB;
+	}
+	else {
+		mode.StdMode_Flag = TRUE;
+		mode.u.Std.Mode = ZCL_SXGA_MONO;
+		mode.u.Std.FrameRate = ZCL_Fps_15;
+	}
 
 	if (!ZCLSetCameraMode(m_hCamera, &mode))
 		return false;		
 
+/*
+	if (m_externalTrigger) {
+		ZCL_SETIMAGEINFO info;
+
+		info.PosX = 0;
+		info.PosY = 0;
+		info.Width = 1280;
+		info.Height = 960;
+		info.MaxSize_Flag = 0;
+
+		if (!ZCLSetImageInfo(m_hCamera, &info))
+			return false;
+	}
+*/
 	return true;
 }
 
@@ -337,7 +360,7 @@ bool QtSonyCam::setupTriggerSource()
 
 	if (m_externalTrigger) {
 		value.ReqID = ZCL_VALUE;
-		value.u.Trigger.Polarity = 1;
+		value.u.Trigger.Polarity = 0;
 		value.u.Trigger.Source = ZCL_Trigger_Source0;
 		value.u.Trigger.Mode = ZCL_Trigger_Mode0;
 		value.u.Trigger.Parameter = 0;
@@ -465,16 +488,10 @@ void QtSonyCam::updateStatusBar()
 {
 	QString s;
 
-	if (m_cameraUID) {
+	if (m_cameraUID)
 		m_cameraModelStatus->setText(m_cameraModel);
-		m_cameraFormatStatus->setText(m_ZCLMonoFormats.at((int)m_zclStdMode));
-		m_cameraFPSStatus->setText(m_ZCLFrameRates.at((int)m_zclFps));
-	}
-	else {
-		m_cameraModelStatus->setText("");
-		m_cameraFormatStatus->setText("");
-		m_cameraFPSStatus->setText("");
-	}
+	else
+		m_fpsStatus->setText("0 fps");
 
 	s.sprintf("%08x%08x",
 			(DWORD)((m_cameraUID & 0xffffffff00000000) >> 32),
@@ -518,20 +535,10 @@ void QtSonyCam::layoutStatusBar()
 	m_cameraUIDStatus->setFrameShadow(QFrame::Sunken);
 	ui.statusBar->addWidget(m_cameraUIDStatus);
 
-	m_cameraFormatStatus = new QLabel();
-	m_cameraFormatStatus->setFrameStyle(QFrame::Panel);
-	m_cameraFormatStatus->setFrameShadow(QFrame::Sunken);
-	ui.statusBar->addWidget(m_cameraFormatStatus);
-
-	m_cameraFPSStatus = new QLabel();
-	m_cameraFPSStatus->setFrameStyle(QFrame::Panel);
-	m_cameraFPSStatus->setFrameShadow(QFrame::Sunken);
-	ui.statusBar->addWidget(m_cameraFPSStatus);
-	
-	m_actualFPSStatus = new QLabel("Actual: 0 fps");
-	m_actualFPSStatus->setFrameStyle(QFrame::Panel);
-	m_actualFPSStatus->setFrameShadow(QFrame::Sunken);
-	ui.statusBar->addWidget(m_actualFPSStatus);
+	m_fpsStatus = new QLabel();
+	m_fpsStatus->setFrameStyle(QFrame::Panel);
+	m_fpsStatus->setFrameShadow(QFrame::Sunken);
+	ui.statusBar->addWidget(m_fpsStatus);
 }
 
 void QtSonyCam::saveWindowState()

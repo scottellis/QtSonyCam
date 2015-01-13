@@ -69,10 +69,6 @@ private:
 	HCAMERA m_hCamera;
 	QString m_cameraModel;
 	quint64 m_cameraUID;
-	ZCL_STDMODE m_zclStdMode;
-	ZCL_FPS m_zclFps;
-	ZCL_EXTMODE m_zclExtMode;
-	ZCL_COLORID m_zclColorID;
 
 	int m_frameTimer;
 	int m_frameCount;
@@ -94,9 +90,7 @@ private:
 	QSettings *m_settings;
 	QLabel *m_cameraModelStatus;
 	QLabel *m_cameraUIDStatus;
-	QLabel *m_cameraFormatStatus;
-	QLabel *m_cameraFPSStatus;
-	QLabel *m_actualFPSStatus;
+	QLabel *m_fpsStatus;
 };
 
 #endif // QTSONYCAM_H
