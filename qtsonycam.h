@@ -41,10 +41,12 @@ protected:
 
 private:
 	bool findCamera();
-	bool setupCameraMode();
-	bool setupTriggerSource();
+	bool setCameraMode();
+	bool setTriggerSource();
+	bool setPacketSize();
 	void showFrame(cv::Mat *frame);
 	bool setFeatureValue(ZCL_FEATUREID id, quint32 val);
+	void showLastError();
 
 	void initFeatureLists();
 	void initZCLLists();
@@ -61,6 +63,7 @@ private:
 	QStringList m_ZCLColorFormats;
 	QStringList m_ZCLFrameRates;
 	QStringList m_ZCLColorIDs;
+	QStringList m_ZCLErrorCodes;
 
 	bool m_running;
 	bool m_color;
@@ -91,6 +94,7 @@ private:
 	QLabel *m_cameraModelStatus;
 	QLabel *m_cameraUIDStatus;
 	QLabel *m_fpsStatus;
+	QLabel *m_errorStatus;
 };
 
 #endif // QTSONYCAM_H

@@ -143,7 +143,7 @@ void QtSonyCam::newFrame(cv::Mat *frame)
 
 void QtSonyCam::onStart()
 {
-	if (!setupTriggerSource()) {
+	if (!setTriggerSource()) {
 		ZCLClose(m_hCamera);
 		m_hCamera = NULL;
 		m_cameraUID = 0;
@@ -214,26 +214,41 @@ void QtSonyCam::onImageInfo()
 		return;
 	}
 
-	if ((int)info.Image.ColorID < m_ZCLColorIDs.length())
-		color = m_ZCLColorIDs.at((int)info.Image.ColorID);
-	else
-		color = "Unknown";
+	if (info.StdMode_Flag) {
+		if ((int)info.Image.ColorID < m_ZCLColorIDs.length())
+			color = m_ZCLColorIDs.at((int)info.Image.ColorID);
+		else
+			color = "Unknown";
 
-	s.sprintf("PosX: %u\nPosY: %u\nWidth: %u\nHeight: %u\nBufferLen: %lu\nDataLen: %lu\nColorID: ",
-		info.Image.PosX,
-		info.Image.PosY,
-		info.Image.Width,
-		info.Image.Height,
-		info.Image.Buffer,
-		info.Image.DataLength);
+		s.sprintf("StdMode: %u\nPosX: %u\nPosY: %u\nWidth: %u\nHeight: %u\nBufferLen: %lu\nDataLen: %lu\nColorID: ",
+			info.StdMode_Flag,
+			info.Image.PosX,
+			info.Image.PosY,
+			info.Image.Width,
+			info.Image.Height,
+			info.Image.Buffer,
+			info.Image.DataLength);
 
-	QMessageBox::information(this, "Image Info", s + color);
+			QMessageBox::information(this, "Image Info", s + color);
+	}
+	else {
+		s.sprintf("StdMode: %u\nMaxImageX: %u\nMaxImageY: %u\nUnitSizeX: %u\nUnitSizeY: %u\nUnitPosX: %u\nUnitPosY: %u",
+			info.StdMode_Flag,
+			info.Ext.MaxImageX,
+			info.Ext.MaxImageY,
+			info.Ext.UnitSizeX,
+			info.Ext.UnitSizeY,
+			info.Ext.UnitPosX,
+			info.Ext.UnitPosY);
+
+		QMessageBox::information(this, "Image Info", s);
+	}
 }
 
 void QtSonyCam::onExternalTrigger()
 {
 	m_externalTrigger = ui.actionExternal_Trigger->isChecked();
-	setupCameraMode();
+	setCameraMode();
 }
 
 bool QtSonyCam::findCamera()
@@ -283,12 +298,13 @@ bool QtSonyCam::findCamera()
 	m_cameraModel = (char *)cameraList->Info[index].ModelName;
 
 	if (!ZCLOpen(m_cameraUID, &m_hCamera)) {
+		showLastError();
 		m_hCamera = NULL;
 		QMessageBox::warning(this, "Error", "ZCLOpen failed");
 		return false;
 	}
 
-	if (!setupCameraMode()) {
+	if (!setCameraMode()) {
 		ZCLClose(m_hCamera);
 		m_hCamera = NULL;
 		m_cameraUID = 0;
@@ -298,10 +314,12 @@ bool QtSonyCam::findCamera()
 
 	initFeatureLists();
 
+	showLastError();
+
 	return true;
 }
 
-bool QtSonyCam::setupCameraMode()
+bool QtSonyCam::setCameraMode()
 {
 	int i;
 	ZCL_CAMERAMODE mode;
@@ -309,8 +327,10 @@ bool QtSonyCam::setupCameraMode()
 	if (!m_hCamera)
 		return false;
 
-	if (!ZCLNowCameraMode(m_hCamera, &mode))
+	if (!ZCLNowCameraMode(m_hCamera, &mode)) {
+		showLastError();
 		return false;
+	}
 
 	if (m_cameraModel == "XCD-SX90")
 		m_color = false;
@@ -329,27 +349,43 @@ bool QtSonyCam::setupCameraMode()
 		mode.u.Std.FrameRate = ZCL_Fps_15;
 	}
 
-	if (!ZCLSetCameraMode(m_hCamera, &mode))
+	if (!ZCLSetCameraMode(m_hCamera, &mode)) {
+		showLastError();
 		return false;		
-
-/*
-	if (m_externalTrigger) {
-		ZCL_SETIMAGEINFO info;
-
-		info.PosX = 0;
-		info.PosY = 0;
-		info.Width = 1280;
-		info.Height = 960;
-		info.MaxSize_Flag = 0;
-
-		if (!ZCLSetImageInfo(m_hCamera, &info))
-			return false;
 	}
-*/
+
+	if (m_externalTrigger)
+		return setPacketSize();
+
 	return true;
 }
 
-bool QtSonyCam::setupTriggerSource()
+bool QtSonyCam::setPacketSize()
+{
+	ZCL_GETIMAGEINFO info;
+
+	if (!m_hCamera)
+		return false;
+
+	if (!ZCLGetImageInfo(m_hCamera, &info)) {
+		QMessageBox::warning(this, "Error", "ZCLGetImageInfo failed");
+		return false;
+	}
+
+	if (info.StdMode_Flag) {
+		QMessageBox::warning(this, "Error", "setPacketSize() called when in StdMode");
+		return false;
+	}
+
+	DWORD pktlen = info.Ext.MaxImageX * info.Ext.MaxImageY * 5;
+
+	if (!ZCLSetPktSize(m_hCamera, 5, &pktlen)) {
+		showLastError();
+		return false;
+	}
+}
+
+bool QtSonyCam::setTriggerSource()
 {
 	ZCL_SETFEATUREVALUE value;
 
@@ -369,8 +405,10 @@ bool QtSonyCam::setupTriggerSource()
 		value.ReqID = ZCL_FEATURE_OFF;
 	}
 
-	if (!ZCLSetFeatureValue(m_hCamera, &value))
+	if (!ZCLSetFeatureValue(m_hCamera, &value)) {
+		showLastError();
 		return false;
+	}
 
 	return true;
 }
@@ -407,8 +445,10 @@ bool QtSonyCam::setFeatureValue(ZCL_FEATUREID id, quint32 val)
 	value.ReqID = ZCL_VALUE;
 	value.u.Std.Value = val;
 
-	if (!ZCLSetFeatureValue(m_hCamera, &value))
+	if (!ZCLSetFeatureValue(m_hCamera, &value)) {
+		showLastError();
 		return false;
+	}
 
 	return true;
 }
@@ -455,6 +495,9 @@ void QtSonyCam::initFeatureLists()
 					m_featuresMin.insert(i.key(), min);
 					m_featuresMax.insert(i.key(), max);
 				}
+				else {
+					showLastError();
+				}
 			}
 		}
 	}
@@ -478,10 +521,25 @@ void QtSonyCam::initFeatureLists()
 					m_whiteBalance_V = value.u.WhiteBalance.VR_Value;
 					m_haveWhiteBalance = true;					
 				}
+				else {
+					showLastError();
+				}
 			}
 		}
 	}
 
+}
+
+void QtSonyCam::showLastError()
+{
+	STATUS_RTNCODE code = ZCLGetLastError();
+
+	if (code == STATUSZCL_NO_ERROR)
+		m_errorStatus->setText("");
+	else if ((int)code < m_ZCLErrorCodes.count())
+		m_errorStatus->setText(m_ZCLErrorCodes.at((int)code));
+	else
+		m_errorStatus->setText(QString("Unknown error code %1").arg((int)code));
 }
 
 void QtSonyCam::updateStatusBar()
@@ -539,6 +597,11 @@ void QtSonyCam::layoutStatusBar()
 	m_fpsStatus->setFrameStyle(QFrame::Panel);
 	m_fpsStatus->setFrameShadow(QFrame::Sunken);
 	ui.statusBar->addWidget(m_fpsStatus);
+
+	m_errorStatus = new QLabel();
+	m_errorStatus->setFrameStyle(QFrame::Panel);
+	m_errorStatus->setFrameShadow(QFrame::Sunken);
+	ui.statusBar->addWidget(m_errorStatus, 1);
 }
 
 void QtSonyCam::saveWindowState()
@@ -664,4 +727,39 @@ void QtSonyCam::initZCLLists()
 	m_ZCLColorIDs.append("RGB - 5bit");
 	m_ZCLColorIDs.append("BGR - 5bit No Conv");
 	m_ZCLColorIDs.append("YUV422 - 8bit");
+
+	m_ZCLErrorCodes.append("No error");
+	m_ZCLErrorCodes.append("Successful completion");
+	m_ZCLErrorCodes.append("Parameter error");
+	m_ZCLErrorCodes.append("Buffer too small");
+	m_ZCLErrorCodes.append("Camera open error");
+	m_ZCLErrorCodes.append("Camera already open");
+	m_ZCLErrorCodes.append("Camera not found");
+	m_ZCLErrorCodes.append("Camera is not opened");
+	m_ZCLErrorCodes.append("Communication error");
+	m_ZCLErrorCodes.append("Data inaccurate");
+	m_ZCLErrorCodes.append("Function not supported");
+	m_ZCLErrorCodes.append("Camera parameter error");
+	m_ZCLErrorCodes.append("Camera feature control error");
+	m_ZCLErrorCodes.append("Camera parameter error (AbsValue, Value)");
+	m_ZCLErrorCodes.append("Self-clear flag not cleared");
+	m_ZCLErrorCodes.append("Image size setting error");
+	m_ZCLErrorCodes.append("Requested during securing of iso resources");
+	m_ZCLErrorCodes.append("Iso resources not secured");
+	m_ZCLErrorCodes.append("Failed to secure iso resources");
+	m_ZCLErrorCodes.append("Already started");
+	m_ZCLErrorCodes.append("Not started");
+	m_ZCLErrorCodes.append("Request failure");
+	m_ZCLErrorCodes.append("Request timeout");
+	m_ZCLErrorCodes.append("Soft trigger busy");
+	m_ZCLErrorCodes.append("Multi-slope setting error");
+	m_ZCLErrorCodes.append("Abort execution error");
+	m_ZCLErrorCodes.append("User cancelled request");
+	m_ZCLErrorCodes.append("Bus reset cancelled request");
+	m_ZCLErrorCodes.append("Executive request");
+	m_ZCLErrorCodes.append("Struct version error");
+	m_ZCLErrorCodes.append("1394 function only");
+	m_ZCLErrorCodes.append("GigE function only");
+	m_ZCLErrorCodes.append("Not a multicast IP address");
+	m_ZCLErrorCodes.append("IP address error");
 }
