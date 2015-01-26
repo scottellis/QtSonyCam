@@ -383,6 +383,8 @@ bool QtSonyCam::setPacketSize()
 		showLastError();
 		return false;
 	}
+
+	return true;
 }
 
 bool QtSonyCam::setTriggerSource()
