@@ -2,7 +2,7 @@
 
 A small test program for working with some old Sony [XCD-SX90][xcd-sx90] and [XCD-SX90CR][xcd-sx90cr] *FireWire* cameras using the *ZCL SDK for Windows 7*.
 
-You can download the **ZCL SDK** from either of those camera link pages under the *Software* section. A login is required.
+You can download the *ZCL SDK* from either of those camera link pages under the *Software* section. A login is required.
 
 I tested using this version : *Sony_ZCL_SDK_v2-12.2_Win7_32bit.zip*
 
